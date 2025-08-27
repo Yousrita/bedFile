@@ -5,8 +5,8 @@ from mergeBed import handle_merge_operation
 from intersectBed import load_bed_int, intersect_bedtools
 from sort import sort_bed, handle_sort_operation
 import pandas as pd
-
-
+import gzip
+import io
 
 # 👉 Déplace setup_page_config en tout début de script
 setup_page_config()
@@ -37,6 +37,24 @@ def setup_styles():
     </style>
     """, unsafe_allow_html=True)
 
+def read_compressed_file(uploaded_file):
+    """Lire les fichiers compressés .gz"""
+    try:
+        if uploaded_file.name.endswith('.gz'):
+            # Lire le fichier compressé
+            with gzip.open(uploaded_file, 'rt') as f:
+                content = f.read()
+            # Créer un objet StringIO pour pandas
+            file_obj = io.StringIO(content)
+            return file_obj
+        else:
+            # Lire le fichier normal
+            content = uploaded_file.getvalue().decode('utf-8')
+            file_obj = io.StringIO(content)
+            return file_obj
+    except Exception as e:
+        st.error(f"Erreur lecture fichier compressé: {str(e)}")
+        return None
 
 def main():
     # Interface setup
@@ -49,11 +67,11 @@ def main():
     if 'file_a_uploaded' not in st.session_state:
         st.session_state.file_a_uploaded = None
     
-    # File upload (fichier principal)
+    # File upload (fichier principal) - AJOUT .gz
     uploaded_file = st.file_uploader(
         "Upload BED file",
-        type=["bed"],
-        help="Supported formats: .bed, .bed.gz"
+        type=["bed", "bed.gz", "txt", "txt.gz"],
+        help="Supported formats: .bed, .bed.gz, .txt, .txt.gz"
     )
           
     # Initialize df
@@ -104,12 +122,12 @@ def main():
         st.subheader("⚡ Intersection BED")
         st.info("Recherche des régions qui se chevauchent entre les deux fichiers")
         
-        # Uploader le deuxième fichier dans une section dédiée
+        # Uploader le deuxième fichier dans une section dédiée - AJOUT .gz
         uploaded_file_a = st.file_uploader(
             "Sélectionnez le deuxième fichier BED", 
-            type=["bed"], 
+            type=["bed", "bed.gz", "txt", "txt.gz"], 
             key="fileA_intersect",
-            help="Supported formats: .bed, .bed.gz"
+            help="Supported formats: .bed, .bed.gz, .txt, .txt.gz"
         )
         
         # Bouton pour exécuter l'intersection
