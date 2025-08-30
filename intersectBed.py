@@ -1,190 +1,184 @@
 import pandas as pd
 import streamlit as st
+import gzip
+import io
 import subprocess
 import tempfile
 import os
-from io import StringIO
 
-# --- Vérification de l'installation de bedtools ---
-def check_bedtools_installed():
-    """Vérifie si bedtools est installé et accessible"""
-    try:
-        result = subprocess.run(['bedtools', '--version'], 
-                              capture_output=True, text=True, timeout=10)
-        if result.returncode == 0 and "bedtools" in result.stdout.lower():
-            return True
-        return False
-    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError):
-        return False
-
-# --- Fallback manuel si bedtools échoue ---
-def intersect_manual(df1, df2):
+def read_bed_file(uploaded_file):
     """
-    Implémentation manuelle de l'intersection comme fallback
+    Lit un fichier BED (normal ou compressé) et retourne un DataFrame
     """
     try:
-        results = []
+        # Vérifier si c'est un fichier compressé
+        if uploaded_file.name.endswith('.gz'):
+            with gzip.open(uploaded_file, 'rt') as f:
+                content = f.read()
+            file_obj = io.StringIO(content)
+        else:
+            content = uploaded_file.getvalue().decode('utf-8')
+            file_obj = io.StringIO(content)
         
-        # Assurer que les colonnes sont numériques
-        df1 = df1.copy()
-        df2 = df2.copy()
-        df1['start'] = pd.to_numeric(df1['start'], errors='coerce')
-        df1['end'] = pd.to_numeric(df1['end'], errors='coerce')
-        df2['start'] = pd.to_numeric(df2['start'], errors='coerce')
-        df2['end'] = pd.to_numeric(df2['end'], errors='coerce')
+        # Détecter le nombre de colonnes
+        first_line = content.split('\n')[0]
+        num_columns = len(first_line.split('\t'))
         
-        # Supprimer les lignes avec des valeurs NaN
-        df1 = df1.dropna(subset=['start', 'end'])
-        df2 = df2.dropna(subset=['start', 'end'])
+        bed_cols = ['chrom', 'start', 'end', 'name', 'score', 'strand', 
+                   'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 
+                   'blockSizes', 'blockStarts']
         
-        for _, row1 in df1.iterrows():
-            chrom1, start1, end1 = row1['chrom'], int(row1['start']), int(row1['end'])
-            
-            if pd.isna(start1) or pd.isna(end1) or start1 >= end1:
-                continue
-            
-            # Trouver les chevauchements dans df2 pour le même chromosome
-            overlaps = df2[(df2['chrom'] == chrom1)].copy()
-            
-            overlaps['start'] = pd.to_numeric(overlaps['start'], errors='coerce')
-            overlaps['end'] = pd.to_numeric(overlaps['end'], errors='coerce')
-            overlaps = overlaps.dropna(subset=['start', 'end'])
-            
-            for _, row2 in overlaps.iterrows():
-                start2, end2 = int(row2['start']), int(row2['end'])
-                
-                if pd.isna(start2) or pd.isna(end2) or start2 >= end2:
-                    continue
-                
-                # Calculer le chevauchement
-                overlap_start = max(start1, start2)
-                overlap_end = min(end1, end2)
-                
-                if overlap_start < overlap_end:  # Il y a chevauchement
-                    results.append({
-                        'chrom_a': chrom1, 'start_a': start1, 'end_a': end1,
-                        'chrom_b': row2['chrom'], 'start_b': start2, 'end_b': end2,
-                        'overlap_length': overlap_end - overlap_start
-                    })
+        df = pd.read_csv(file_obj, sep='\t', header=None, 
+                        names=bed_cols[:num_columns], comment='#')
         
-        return pd.DataFrame(results)
+        return df
         
     except Exception as e:
-        st.error(f"❌ Erreur lors de l'intersection manuelle : {e}")
+        st.error(f"Erreur lecture fichier: {str(e)}")
         return None
 
-# --- Fonction d'intersection SIMPLIFIÉE ---
+def load_bed_int(file1, file2):
+    """
+    Charge deux fichiers BED pour l'intersection
+    """
+    df1 = read_bed_file(file1)
+    df2 = read_bed_file(file2)
+    
+    # Afficher la structure des fichiers pour débogage
+    if df1 is not None and df2 is not None:
+        st.write(f"**Structure Fichier A:** {df1.shape[1]} colonnes - {list(df1.columns)}")
+        st.write(f"**Structure Fichier B:** {df2.shape[1]} colonnes - {list(df2.columns)}")
+        
+        if df1.shape[1] != df2.shape[1]:
+            st.warning("⚠️ Les fichiers ont des structures différentes!")
+            st.info("Bedtools utilisera seulement les 3 premières colonnes (chrom, start, end) pour l'intersection")
+    
+    return df1, df2
+
 def intersect_bedtools(df1, df2):
     """
-    Effectue l'intersection entre deux DataFrames BED avec l'option classique -wa -wb
+    Effectue l'intersection entre deux DataFrames BED de structures différentes
     """
-    # Vérifier et nettoyer les données
-    df1_clean = clean_bed_data(df1)
-    df2_clean = clean_bed_data(df2)
-    
-    if df1_clean is None or df2_clean is None:
-        st.warning("Données BED invalides, utilisation du mode manuel")
-        return intersect_manual(df1, df2)
-    
     try:
-        # Créer des fichiers temporaires avec un format BED propre
+        # Créer des fichiers temporaires avec seulement les 3 premières colonnes
         with tempfile.NamedTemporaryFile(mode='w', suffix='.bed', delete=False) as f1:
-            df1_clean.to_csv(f1, sep='\t', header=False, index=False)
+            # ⚠️ CORRECTION : Utiliser seulement les 3 premières colonnes pour bedtools
+            df1.iloc[:, :3].to_csv(f1.name, sep='\t', header=False, index=False)
             temp_file1 = f1.name
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.bed', delete=False) as f2:
-            df2_clean.to_csv(f2, sep='\t', header=False, index=False)
+            # ⚠️ CORRECTION : Utiliser seulement les 3 premières colonnes pour bedtools
+            df2.iloc[:, :3].to_csv(f2.name, sep='\t', header=False, index=False)
             temp_file2 = f2.name
         
-        try:
-            # Commande bedtools classique : -wa -wb (écrit les deux fichiers)
-            cmd = [
-                'bedtools', 'intersect',
-                '-a', temp_file1,
-                '-b', temp_file2,
-                '-wa', '-wb',
-                '-sorted'
-            ]
-            
-            # Exécuter la commande
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            
-            if result.returncode == 0:
-                if result.stdout.strip():
-                    # Lire le résultat en DataFrame - CORRECTION StringIO
-                    result_df = pd.read_csv(StringIO(result.stdout), sep='\t', header=None)
-                    
-                    # Nommer les colonnes
-                    n_cols_a = len(df1_clean.columns)
-                    n_cols_b = len(df2_clean.columns)
-                    
-                    col_names = []
-                    for i in range(n_cols_a):
-                        col_names.append(f'A_col_{i+1}')
-                    for i in range(n_cols_b):
-                        col_names.append(f'B_col_{i+1}')
-                    
-                    result_df.columns = col_names[:len(result_df.columns)]
-                    return result_df
-                else:
-                    return pd.DataFrame()  # Aucun résultat
-            else:
-                st.error(f"❌ Erreur bedtools: {result.stderr}")
-                # Fallback vers le mode manuel
-                return intersect_manual(df1, df2)
-                
-        finally:
-            # Nettoyer les fichiers temporaires
-            for f in [temp_file1, temp_file2]:
-                if os.path.exists(f):
-                    os.unlink(f)
-            
-    except Exception as e:
-        st.error(f"❌ Erreur lors de l'intersection avec bedtools : {str(e)}")
-        st.info("🔄 Utilisation du mode manuel...")
-        return intersect_manual(df1, df2)
-
-def clean_bed_data(df):
-    """Nettoie et valide les données BED"""
-    try:
-        df_clean = df.copy()
+        # Exécuter bedtools intersect
+        result = subprocess.run([
+            'bedtools', 'intersect', 
+            '-a', temp_file1, 
+            '-b', temp_file2,
+            '-wa', '-wb'
+        ], capture_output=True, text=True)
         
-        # Vérifier les colonnes requises
-        required_cols = ['chrom', 'start', 'end']
-        if not all(col in df_clean.columns for col in required_cols):
+        # Nettoyer les fichiers temporaires
+        os.unlink(temp_file1)
+        os.unlink(temp_file2)
+        
+        if result.returncode == 0:
+            if not result.stdout.strip():
+                st.info("ℹ️ Aucune intersection trouvée entre les fichiers")
+                return pd.DataFrame()
+            
+            # Lire le résultat
+            result_df = pd.read_csv(io.StringIO(result.stdout), sep='\t', header=None)
+            
+            # ⚠️ CORRECTION IMPORTANTE : 
+            # Bedtools avec -wa -wb retourne TOUJOURS 6 colonnes :
+            # Colonnes 1-3 : A_chrom, A_start, A_end (du fichier A)
+            # Colonnes 4-6 : B_chrom, B_start, B_end (du fichier B)
+            
+            # Nommer les colonnes de base
+            result_df.columns = ['A_chrom', 'A_start', 'A_end', 'B_chrom', 'B_start', 'B_end']
+            
+            # ⭐ OPTIONNEL : Si vous voulez garder les colonnes supplémentaires originales
+            # Vous pouvez faire un merge avec les données originales plus tard
+            
+            return result_df
+        else:
+            st.error(f"Erreur bedtools: {result.stderr}")
             return None
-        
-        # Convertir en numérique
-        df_clean['start'] = pd.to_numeric(df_clean['start'], errors='coerce')
-        df_clean['end'] = pd.to_numeric(df_clean['end'], errors='coerce')
-        
-        # Supprimer les lignes invalides
-        df_clean = df_clean.dropna(subset=['start', 'end'])
-        df_clean = df_clean[df_clean['start'] < df_clean['end']]
-        
-        # Trier par chromosome et position
-        df_clean = df_clean.sort_values(['chrom', 'start', 'end'])
-        
-        return df_clean[['chrom', 'start', 'end']]
-        
+            
     except Exception as e:
-        st.error(f"Erreur lors du nettoyage des données BED: {e}")
+        st.error(f"Erreur lors de l'intersection: {str(e)}")
         return None
 
-# --- Chargement de deux fichiers BED en DataFrames ---
-def load_bed_int(file1, file2):
-    """Charge deux fichiers BED en DataFrame"""
+def intersect_bedtools_advanced(df1, df2, options=None):
+    """
+    Version avancée avec plus d'options pour l'intersection
+    """
+    if options is None:
+        options = {}
+    
     try:
-        # Lecture des fichiers
-        df1 = pd.read_csv(file1, sep='\t', comment='#', header=None)
-        df2 = pd.read_csv(file2, sep='\t', comment='#', header=None)
-
-        # Renommage des colonnes
-        df1 = df1.rename(columns={0: 'chrom', 1: 'start', 2: 'end'})
-        df2 = df2.rename(columns={0: 'chrom', 1: 'start', 2: 'end'})
-
-        return df1[['chrom', 'start', 'end']], df2[['chrom', 'start', 'end']]
-
+        # Créer des fichiers temporaires avec seulement les 3 premières colonnes
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.bed', delete=False) as f1:
+            df1.iloc[:, :3].to_csv(f1.name, sep='\t', header=False, index=False)
+            temp_file1 = f1.name
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.bed', delete=False) as f2:
+            df2.iloc[:, :3].to_csv(f2.name, sep='\t', header=False, index=False)
+            temp_file2 = f2.name
+        
+        # Construire la commande bedtools
+        cmd = ['bedtools', 'intersect', '-a', temp_file1, '-b', temp_file2]
+        
+        # Ajouter les options
+        if options.get('wa', False):
+            cmd.append('-wa')
+        if options.get('wb', False):
+            cmd.append('-wb')
+        if options.get('wo', False):
+            cmd.append('-wo')
+        if options.get('v', False):
+            cmd.append('-v')
+        if options.get('f', 0) > 0:
+            cmd.extend(['-f', str(options['f'])])
+        
+        # Exécuter bedtools intersect
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        # Nettoyer les fichiers temporaires
+        os.unlink(temp_file1)
+        os.unlink(temp_file2)
+        
+        if result.returncode == 0:
+            if not result.stdout.strip():
+                return pd.DataFrame()
+            
+            # Lire le résultat
+            result_df = pd.read_csv(io.StringIO(result.stdout), sep='\t', header=None)
+            
+            # Adapter les colonnes en fonction des options
+            if options.get('wo', False):
+                # -wo ajoute une colonne avec le pourcentage d'overlap
+                result_df.columns = ['A_chrom', 'A_start', 'A_end', 'B_chrom', 'B_start', 'B_end', 'overlap']
+            elif options.get('wa', False) and options.get('wb', False):
+                # -wa -wb : 6 colonnes
+                result_df.columns = ['A_chrom', 'A_start', 'A_end', 'B_chrom', 'B_start', 'B_end']
+            elif options.get('wa', False):
+                # -wa seulement : 3 colonnes (fichier A)
+                result_df.columns = ['A_chrom', 'A_start', 'A_end']
+            elif options.get('wb', False):
+                # -wb seulement : 3 colonnes (fichier B)
+                result_df.columns = ['B_chrom', 'B_start', 'B_end']
+            else:
+                # Par défaut : 3 colonnes (fichier A)
+                result_df.columns = ['A_chrom', 'A_start', 'A_end']
+            
+            return result_df
+        else:
+            st.error(f"Erreur bedtools: {result.stderr}")
+            return None
+            
     except Exception as e:
-        st.error(f"❌ Erreur lors du chargement des fichiers : {e}")
-        return None, None
+        st.error(f"Erreur lors de l'intersection: {str(e)}")
+        return None

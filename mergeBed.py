@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-from preview import load_bed, show_metrics, show_data_preview,show_metrics_banner
+from preview import load_bed, show_metrics_banner, show_data_preview  # ⬅️ CORRIGÉ ICI
 
 def merge_bed_files(df: pd.DataFrame) -> pd.DataFrame:
     """Merges a BED dataframe with itself"""
@@ -51,10 +51,8 @@ def handle_merge_operation(df: pd.DataFrame):
         # Result display
         st.success("Merge completed!")
         with st.expander("📊 After Merge", expanded=True):
-        
             show_metrics_banner(result)
             st.dataframe(result.head(100))
-          
         
         # Download
         st.download_button(
