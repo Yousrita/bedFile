@@ -4,37 +4,59 @@ from typing import Optional
 
 def load_bed(uploaded_file) -> Optional[pd.DataFrame]:
     """
-    Charge et valide un fichier BED uploadé
-    Retourne un DataFrame avec seulement les colonnes chrom/start/end
+    Charge un fichier BED avec TOUTES ses colonnes
     """
     try:
+        # Lire le fichier sans limite de colonnes
         df = pd.read_csv(
             uploaded_file,
             sep="\t",
             header=None,
             comment='#',
-            dtype={0: str, 1: int, 2: int}
+            dtype=str  # ← Lire tout en string d'abord
         )
         
+        # Définir les noms de colonnes BED standard
+        bed_cols = ['chrom', 'start', 'end', 'name', 'score', 'strand', 
+                   'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 
+                   'blockSizes', 'blockStarts']
+        
+        # Nommer les colonnes disponibles
+        df.columns = bed_cols[:len(df.columns)]
+        
+        # Convertir start et end en numérique
+        if 'start' in df.columns:
+            df['start'] = pd.to_numeric(df['start'], errors='coerce')
+        if 'end' in df.columns:
+            df['end'] = pd.to_numeric(df['end'], errors='coerce')
+        
+        # Vérifier la validité
         if len(df.columns) < 3:
             st.error("❌ Format BED invalide : minimum 3 colonnes requises")
             return None
             
-        # Ne garder que les 3 premières colonnes
-        df = df.iloc[:, :3].copy()
-        df.columns = ["chrom", "start", "end"]
-        
         if (df["start"] > df["end"]).any():
             st.error("❌ Erreur : des positions start > end détectées")
             return None
             
+        st.success(f"✅ Fichier chargé : {len(df)} régions, {len(df.columns)} colonnes")
         return df
+        
     except Exception as e:
         st.error(f"❌ Erreur de chargement : {str(e)}")
         return None
 
+def load_bed_basic(uploaded_file) -> Optional[pd.DataFrame]:
+    """
+    Charge seulement les 3 premières colonnes (pour les opérations bedtools)
+    """
+    df = load_bed(uploaded_file)
+    if df is not None:
+        return df[['chrom', 'start', 'end']].copy()
+    return None
+
 def show_metrics_banner(df, genome_size=3_299_210_039):
-    """Display a comprehensive single-line file summary avec stats UCSC-style"""
+    """Display a comprehensive single-line file summary"""
     if df is None or df.empty:
         return
         
@@ -48,17 +70,18 @@ def show_metrics_banner(df, genome_size=3_299_210_039):
     # Check if strand column exists
     strand_stats = df['strand'].value_counts(normalize=True).to_dict() if 'strand' in df else None
     
-    # Stats style UCSC améliorées
+    # Stats améliorées
     stats = {
-        "🧬 Chromosomes": df['chrom'].nunique(),
+        "🧬 Genes": df['chrom'].nunique(),
         "📊 Intervals": f"{len(df):,}",
         "📏 Avg length": f"{length.mean():.0f} bp",
-        "🎯 Min length": f"{length.min():,} bp",
+        "🎯 Min length": f"{length.min():,} bp", 
         "🎯 Max length": f"{length.max():,} bp",
         "🌐 Coverage": f"{coverage_percent:.1f}%",
         "🧩 Total bases": f"{total_bases/1e6:.1f} Mb",
-        "🔄 Duplicates": f"{duplicates:,}",
+        "🔄 Duplicates": duplicates,
         "❌ Null values": null_values
+        #"📋 Columns": len(df.columns)
     }
     
     # Add strand metrics if available
@@ -100,12 +123,18 @@ def show_metrics_banner(df, genome_size=3_299_210_039):
     st.write("</div>", unsafe_allow_html=True)
 
 def show_data_preview(df: pd.DataFrame) -> None:
-    """Affiche l'aperçu des données avec onglets"""
+    """Affiche l'aperçu des données avec TOUTES les colonnes"""
     tab1, tab2 = st.tabs(["📋 Aperçu des données", "🧪 Qualité des données"])
     
     with tab1:
+        # Afficher TOUTES les colonnes
         st.dataframe(df.head(100), height=300)
-        st.caption(f"Affichage de 100 lignes sur {len(df):,} totales")
+        st.caption(f"Affichage de 100 lignes sur {len(df):,} totales - {len(df.columns)} colonnes")
+        
+        # Afficher la liste des colonnes
+        st.write("**📝 Colonnes disponibles :**")
+        for i, col in enumerate(df.columns):
+            st.write(f"- `{col}` ({df[col].dtype})")
     
     with tab2:
         show_data_quality(df)
@@ -113,24 +142,41 @@ def show_data_preview(df: pd.DataFrame) -> None:
 def show_data_quality(df: pd.DataFrame) -> None:
     """Affiche les statistiques de qualité des données"""
     st.subheader("🧬 Valeurs Distinctes")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Chromosomes uniques", df["chrom"].nunique())
-    
+        st.metric("Chromosomes", df["chrom"].nunique())
     with col2:
-        st.metric("Taille totale (bp)", f"{(df['end'] - df['start']).sum():,}")
-    
+        st.metric("Taille totale", f"{(df['end'] - df['start']).sum():,} bp")
     with col3:
         st.metric("Valeurs nulles", df.isnull().sum().sum())
+    with col4:
+        st.metric("Colonnes", len(df.columns))
     
     # Analyse des valeurs manquantes par colonne
     st.subheader("🔍 Détail des valeurs nulles")
-    null_details = df.isnull().sum().to_frame("Count")
+    null_details = df.isnull().sum().to_frame("Valeurs nulles")
+    null_details["Pourcentage"] = (null_details["Valeurs nulles"] / len(df) * 100).round(2)
     st.table(null_details)
+    
+    # Types de données par colonne
+    st.subheader("📊 Types de données")
+    dtype_details = pd.DataFrame({
+        'Colonne': df.columns,
+        'Type': [str(dtype) for dtype in df.dtypes],
+        'Valeurs uniques': [df[col].nunique() for col in df.columns]
+    })
+    st.table(dtype_details)
     
     # Analyse des brins si colonne présente
     if 'strand' in df:
         st.subheader("⚖ Distribution des brins")
         strand_dist = df['strand'].value_counts(normalize=True)
         st.bar_chart(strand_dist)
+    
+    # Analyse du score si colonne présente
+    if 'score' in df:
+        st.subheader("📈 Distribution des scores")
+        st.write(f"Score moyen : {df['score'].mean():.2f}")
+        st.write(f"Score min : {df['score'].min()}")
+        st.write(f"Score max : {df['score'].max()}")
