@@ -33,8 +33,8 @@ def load_bed(uploaded_file) -> Optional[pd.DataFrame]:
         st.error(f"❌ Erreur de chargement : {str(e)}")
         return None
 
-def show_metrics_banner(df):
-    """Display a comprehensive single-line file summary"""
+def show_metrics_banner(df, genome_size=3_299_210_039):
+    """Display a comprehensive single-line file summary avec stats UCSC-style"""
     if df is None or df.empty:
         return
         
@@ -42,16 +42,22 @@ def show_metrics_banner(df):
     length = df['end'] - df['start']
     duplicates = df.duplicated().sum()
     null_values = df.isnull().sum().sum()
+    total_bases = length.sum()
+    coverage_percent = (total_bases / genome_size) * 100
     
     # Check if strand column exists
     strand_stats = df['strand'].value_counts(normalize=True).to_dict() if 'strand' in df else None
     
+    # Stats style UCSC améliorées
     stats = {
         "🧬 Chromosomes": df['chrom'].nunique(),
         "📊 Intervals": f"{len(df):,}",
         "📏 Avg length": f"{length.mean():.0f} bp",
-        "🧩 Total span": f"{length.sum()/1e6:.2f} Mb",
-        "🔄 Duplicates": duplicates,
+        "🎯 Min length": f"{length.min():,} bp",
+        "🎯 Max length": f"{length.max():,} bp",
+        "🌐 Coverage": f"{coverage_percent:.1f}%",
+        "🧩 Total bases": f"{total_bases/1e6:.1f} Mb",
+        "🔄 Duplicates": f"{duplicates:,}",
         "❌ Null values": null_values
     }
     
@@ -84,9 +90,10 @@ def show_metrics_banner(df):
                         min-width: 80px;
                         padding: 5px;
                         border-radius: 6px;
-                        background: rgba(255,255,255,0.7);'>
-                <div style='font-size: 11px; color: #555;'>{name}</div>
-                <div style='font-size: 14px; font-weight: 600;'>{value}</div>
+                        background: rgba(255,255,255,0.7);
+                        border: 1px solid #e0e0e0;'>
+                <div style='font-size: 11px; color: #555; margin-bottom: 4px;'>{name}</div>
+                <div style='font-size: 13px; font-weight: 600; color: #2c3e50;'>{value}</div>
             </div>
             """, unsafe_allow_html=True)
     
@@ -98,6 +105,7 @@ def show_data_preview(df: pd.DataFrame) -> None:
     
     with tab1:
         st.dataframe(df.head(100), height=300)
+        st.caption(f"Affichage de 100 lignes sur {len(df):,} totales")
     
     with tab2:
         show_data_quality(df)
