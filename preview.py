@@ -4,51 +4,51 @@ from typing import Optional
 
 def load_bed(uploaded_file) -> Optional[pd.DataFrame]:
     """
-    Charge un fichier BED avec TOUTES ses colonnes
+    Load a BED file with ALL its columns
     """
     try:
-        # Lire le fichier sans limite de colonnes
+        # Read the file without column limit
         df = pd.read_csv(
             uploaded_file,
             sep="\t",
             header=None,
             comment='#',
-            dtype=str  # ← Lire tout en string d'abord
+            dtype=str  # ← Read everything as string first
         )
         
-        # Définir les noms de colonnes BED standard
+        # Define standard BED column names
         bed_cols = ['chrom', 'start', 'end', 'name', 'score', 'strand', 
                    'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 
                    'blockSizes', 'blockStarts']
         
-        # Nommer les colonnes disponibles
+        # Name available columns
         df.columns = bed_cols[:len(df.columns)]
         
-        # Convertir start et end en numérique
+        # Convert start and end to numeric
         if 'start' in df.columns:
             df['start'] = pd.to_numeric(df['start'], errors='coerce')
         if 'end' in df.columns:
             df['end'] = pd.to_numeric(df['end'], errors='coerce')
         
-        # Vérifier la validité
+        # Validate
         if len(df.columns) < 3:
-            st.error("❌ Format BED invalide : minimum 3 colonnes requises")
+            st.error("❌ Invalid BED format: minimum 3 columns required")
             return None
             
         if (df["start"] > df["end"]).any():
-            st.error("❌ Erreur : des positions start > end détectées")
+            st.error("❌ Error: start positions > end positions detected")
             return None
             
-        st.success(f"✅ Fichier chargé : {len(df)} régions, {len(df.columns)} colonnes")
+        # REMOVED: st.success message about file loading
         return df
         
     except Exception as e:
-        st.error(f"❌ Erreur de chargement : {str(e)}")
+        st.error(f"❌ Loading error: {str(e)}")
         return None
 
 def load_bed_basic(uploaded_file) -> Optional[pd.DataFrame]:
     """
-    Charge seulement les 3 premières colonnes (pour les opérations bedtools)
+    Load only the first 3 columns (for bedtools operations)
     """
     df = load_bed(uploaded_file)
     if df is not None:
@@ -70,7 +70,7 @@ def show_metrics_banner(df, genome_size=3_299_210_039):
     # Check if strand column exists
     strand_stats = df['strand'].value_counts(normalize=True).to_dict() if 'strand' in df else None
     
-    # Stats améliorées
+    # Improved stats
     stats = {
         "🧬 Genes": df['chrom'].nunique(),
         "📊 Intervals": f"{len(df):,}",
@@ -81,7 +81,6 @@ def show_metrics_banner(df, genome_size=3_299_210_039):
         "🧩 Total bases": f"{total_bases/1e6:.1f} Mb",
         "🔄 Duplicates": duplicates,
         "❌ Null values": null_values
-        #"📋 Columns": len(df.columns)
     }
     
     # Add strand metrics if available
@@ -123,16 +122,16 @@ def show_metrics_banner(df, genome_size=3_299_210_039):
     st.write("</div>", unsafe_allow_html=True)
 
 def show_data_preview(df: pd.DataFrame) -> None:
-    """Affiche l'aperçu des données avec TOUTES les colonnes"""
-    tab1, tab2 = st.tabs(["📋 Aperçu des données", "🧪 Qualité des données"])
+    """Display data preview with ALL columns"""
+    tab1, tab2 = st.tabs(["📋 Data Preview", "🧪 Data Quality"])
     
     with tab1:
-        # Afficher TOUTES les colonnes
+        # Display ALL columns
         st.dataframe(df.head(100), height=300)
-        st.caption(f"Affichage de 100 lignes sur {len(df):,} totales - {len(df.columns)} colonnes")
+        st.caption(f"Displaying 100 rows out of {len(df):,} total - {len(df.columns)} columns")
         
-        # Afficher la liste des colonnes
-        st.write("**📝 Colonnes disponibles :**")
+        # Display column list
+        st.write("**📝 Available columns:**")
         for i, col in enumerate(df.columns):
             st.write(f"- `{col}` ({df[col].dtype})")
     
@@ -140,43 +139,43 @@ def show_data_preview(df: pd.DataFrame) -> None:
         show_data_quality(df)
 
 def show_data_quality(df: pd.DataFrame) -> None:
-    """Affiche les statistiques de qualité des données"""
-    st.subheader("🧬 Valeurs Distinctes")
+    """Display data quality statistics"""
+    st.subheader("🧬 Distinct Values")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric("Chromosomes", df["chrom"].nunique())
     with col2:
-        st.metric("Taille totale", f"{(df['end'] - df['start']).sum():,} bp")
+        st.metric("Total size", f"{(df['end'] - df['start']).sum():,} bp")
     with col3:
-        st.metric("Valeurs nulles", df.isnull().sum().sum())
+        st.metric("Null values", df.isnull().sum().sum())
     with col4:
-        st.metric("Colonnes", len(df.columns))
+        st.metric("Columns", len(df.columns))
     
-    # Analyse des valeurs manquantes par colonne
-    st.subheader("🔍 Détail des valeurs nulles")
-    null_details = df.isnull().sum().to_frame("Valeurs nulles")
-    null_details["Pourcentage"] = (null_details["Valeurs nulles"] / len(df) * 100).round(2)
+    # Missing values analysis by column
+    st.subheader("🔍 Null Values Detail")
+    null_details = df.isnull().sum().to_frame("Null Values")
+    null_details["Percentage"] = (null_details["Null Values"] / len(df) * 100).round(2)
     st.table(null_details)
     
-    # Types de données par colonne
-    st.subheader("📊 Types de données")
+    # Data types by column
+    st.subheader("📊 Data Types")
     dtype_details = pd.DataFrame({
-        'Colonne': df.columns,
+        'Column': df.columns,
         'Type': [str(dtype) for dtype in df.dtypes],
-        'Valeurs uniques': [df[col].nunique() for col in df.columns]
+        'Unique Values': [df[col].nunique() for col in df.columns]
     })
     st.table(dtype_details)
     
-    # Analyse des brins si colonne présente
+    # Strand analysis if column exists
     if 'strand' in df:
-        st.subheader("⚖ Distribution des brins")
+        st.subheader("⚖ Strand Distribution")
         strand_dist = df['strand'].value_counts(normalize=True)
         st.bar_chart(strand_dist)
     
-    # Analyse du score si colonne présente
+    # Score analysis if column exists
     if 'score' in df:
-        st.subheader("📈 Distribution des scores")
-        st.write(f"Score moyen : {df['score'].mean():.2f}")
-        st.write(f"Score min : {df['score'].min()}")
-        st.write(f"Score max : {df['score'].max()}")
+        st.subheader("📈 Score Distribution")
+        st.write(f"Average score: {df['score'].mean():.2f}")
+        st.write(f"Min score: {df['score'].min()}")
+        st.write(f"Max score: {df['score'].max()}")

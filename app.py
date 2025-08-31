@@ -8,7 +8,7 @@ import pandas as pd
 import gzip
 import io
 
-# 👉 Déplace setup_page_config en tout début de script
+# 👉 Move setup_page_config to the very beginning of the script
 setup_page_config()
 
 def setup_styles():
@@ -38,22 +38,22 @@ def setup_styles():
     """, unsafe_allow_html=True)
 
 def read_compressed_file(uploaded_file):
-    """Lire les fichiers compressés .gz"""
+    """Read compressed .gz files"""
     try:
         if uploaded_file.name.endswith('.gz'):
-            # Lire le fichier compressé
+            # Read the compressed file
             with gzip.open(uploaded_file, 'rt') as f:
                 content = f.read()
-            # Créer un objet StringIO pour pandas
+            # Create a StringIO object for pandas
             file_obj = io.StringIO(content)
             return file_obj
         else:
-            # Lire le fichier normal
+            # Read the normal file
             content = uploaded_file.getvalue().decode('utf-8')
             file_obj = io.StringIO(content)
             return file_obj
     except Exception as e:
-        st.error(f"Erreur lecture fichier compressé: {str(e)}")
+        st.error(f"Error reading compressed file: {str(e)}")
         return None
 
 def main():
@@ -61,13 +61,13 @@ def main():
     setup_styles()
     display_header()
     
-    # Initialiser les états de session pour garder le contexte
+    # Initialize session states to keep context
     if 'intersect_mode' not in st.session_state:
         st.session_state.intersect_mode = False
     if 'file_a_uploaded' not in st.session_state:
         st.session_state.file_a_uploaded = None
     
-    # File upload (fichier principal) - AJOUT .gz
+    # File upload (main file) - ADDED .gz
     uploaded_file = st.file_uploader(
         "Upload BED file",
         type=["bed", "bed.gz", "txt", "txt.gz"],
@@ -109,92 +109,92 @@ def main():
             handle_merge_operation(df)
 
         if intersect_btn:
-            # Activer le mode intersection
+            # Activate intersection mode
             st.session_state.intersect_mode = True
             
         if sort_btn:
             show_metrics_banner(df)
             handle_sort_operation(df)
     
-    # Section pour le deuxième fichier (uniquement en mode intersection)
+    # Section for the second file (only in intersection mode)
     if st.session_state.intersect_mode:
         st.write("---")
-        st.subheader("⚡ Intersection BED")
-        st.info("Recherche des régions qui se chevauchent entre les deux fichiers")
+        st.subheader("⚡ BED Intersection")
+        st.info("Search for overlapping regions between the two files")
         
-        # Uploader le deuxième fichier dans une section dédiée - AJOUT .gz
+        # Upload the second file in a dedicated section - ADDED .gz
         uploaded_file_a = st.file_uploader(
-            "Sélectionnez le deuxième fichier BED", 
+            "Select the second BED file", 
             type=["bed", "bed.gz", "txt", "txt.gz"], 
             key="fileA_intersect",
-            help="Supported formats: .bed, .bed.gz, .txt, .txt.gz"
+            help="Supported formats: .bed"
         )
         
-        # Bouton pour exécuter l'intersection
-        run_intersect_btn = st.button("🚀 Lancer l'intersection", 
+        # Button to execute the intersection
+        run_intersect_btn = st.button("🚀 Run Intersection", 
                                     disabled=uploaded_file_a is None,
                                     type="primary",
                                     use_container_width=True)
         
         if uploaded_file_a is not None:
-            # Stocker le fichier dans l'état de session
+            # Store the file in session state
             st.session_state.file_a_uploaded = uploaded_file_a
             
-            # Charger les deux fichiers
+            # Load both files
             if uploaded_file is not None and uploaded_file_a is not None:
                 df1, df2 = load_bed_int(uploaded_file, uploaded_file_a)
                 
                 if df1 is not None and df2 is not None:
-                    st.success("✅ Fichiers chargés avec succès")
+                    st.success("✅ Files loaded successfully")
                     
-                    # Afficher les infos de base
+                    # Display basic info
                     col_info1, col_info2 = st.columns(2)
                     with col_info1:
-                        st.write(f"**Fichier A:** {len(df1)} régions")
+                        st.write(f"**File A:** {len(df1)} regions")
                     with col_info2:
-                        st.write(f"**Fichier B:** {len(df2)} régions")
+                        st.write(f"**File B:** {len(df2)} regions")
                     
-                    # Exécuter l'intersection quand le bouton est cliqué
+                    # Execute intersection when button is clicked
                     if run_intersect_btn:
-                        with st.spinner("Recherche des chevauchements..."):
-                            # Exécuter l'intersection SIMPLIFIÉE (sans options)
+                        with st.spinner("Searching for overlaps..."):
+                            # Execute SIMPLIFIED intersection (without options)
                             result_df = intersect_bedtools(df1, df2)
                             
                             if result_df is not None:
                                 if len(result_df) > 0:
-                                    st.success(f"✅ {len(result_df)} chevauchements trouvés !")
+                                    st.success(f"✅ {len(result_df)} overlaps found!")
                                     
-                                    # Affichage des résultats
-                                    st.subheader("📊 Résultats de l'intersection")
+                                    # Results display
+                                    st.subheader("📊 Intersection Results")
                                     st.dataframe(result_df.head(20))
                                     
-                                    # Métriques
+                                    # Metrics
                                     col_met1, col_met2, col_met3 = st.columns(3)
                                     with col_met1:
-                                        st.metric("Régions dans A", len(df1))
+                                        st.metric("Regions in A", len(df1))
                                     with col_met2:
-                                        st.metric("Régions dans B", len(df2))
+                                        st.metric("Regions in B", len(df2))
                                     with col_met3:
-                                        st.metric("Chevauchements", len(result_df))
+                                        st.metric("Overlaps", len(result_df))
                                     
-                                    # Téléchargement des résultats
+                                    # Download results
                                     csv = result_df.to_csv(index=False, sep='\t')
                                     st.download_button(
-                                        label="📥 Télécharger les résultats",
+                                        label="📥 Download Results",
                                         data=csv,
                                         file_name="intersection_results.bed",
                                         mime="text/plain",
                                         use_container_width=True
                                     )
                                 else:
-                                    st.warning("⚠️ Aucun chevauchement trouvé entre les fichiers")
+                                    st.warning("⚠️ No overlaps found between files")
         else:
             if st.session_state.file_a_uploaded is None:
-                st.warning("⚠️ Merci d'uploader le deuxième fichier pour continuer.")
+                st.warning("⚠️ Please upload the second file to continue")
     
-    # Bouton pour quitter le mode intersection
+    # Button to exit intersection mode
     if st.session_state.intersect_mode:
-        if st.button("❌ Quitter le mode Intersection"):
+        if st.button("❌ Exit Intersection Mode"):
             st.session_state.intersect_mode = False
             st.session_state.file_a_uploaded = None
             st.rerun()
