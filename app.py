@@ -67,11 +67,11 @@ def main():
     if 'file_a_uploaded' not in st.session_state:
         st.session_state.file_a_uploaded = None
     
-    # File upload (main file) - ADDED .gz
+    # File upload (main file) - ONLY .bed NOW
     uploaded_file = st.file_uploader(
         "Upload BED file",
-        type=["bed", "bed.gz", "txt", "txt.gz"],
-        help="Supported formats: .bed, .bed.gz, .txt, .txt.gz"
+        type=["bed"],  # ← CHANGED: Only .bed files
+        help="Supported format: .bed"  # ← CHANGED: Removed other formats
     )
           
     # Initialize df
@@ -122,12 +122,12 @@ def main():
         st.subheader("⚡ BED Intersection")
         st.info("Search for overlapping regions between the two files")
         
-        # Upload the second file in a dedicated section - ADDED .gz
+        # Upload the second file in a dedicated section - ONLY .bed NOW
         uploaded_file_a = st.file_uploader(
             "Select the second BED file", 
-            type=["bed", "bed.gz", "txt", "txt.gz"], 
+            type=["bed"],  # ← CHANGED: Only .bed files
             key="fileA_intersect",
-            help="Supported formats: .bed"
+            help="Supported format: .bed"  # ← CHANGED: Removed other formats
         )
         
         # Button to execute the intersection

@@ -100,10 +100,10 @@ def display_header():
             <div style='font-size: 72px;'>🧬</div>
             <div style='font-size: 14px; color: #666;'>Bed Toolkit v1.0</div>
         </div>
-        """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True) 
 
     with col2:
-        st.title("BED File Explorer")
+        st.title("BED File Explorer ")
         st.write("""
         <div style='font-size: 16px; color: #555; margin-bottom: 10px;'>
               Exploring and editing genomic data
