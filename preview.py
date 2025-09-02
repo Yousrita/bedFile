@@ -56,7 +56,7 @@ def load_bed_basic(uploaded_file) -> Optional[pd.DataFrame]:
     return None
 
 def show_metrics_banner(df, genome_size=3_299_210_039):
-    """Display a comprehensive single-line file summary"""
+    """Display a comprehensive single-line file summary with colored backgrounds"""
     if df is None or df.empty:
         return
         
@@ -70,52 +70,54 @@ def show_metrics_banner(df, genome_size=3_299_210_039):
     # Check if strand column exists
     strand_stats = df['strand'].value_counts(normalize=True).to_dict() if 'strand' in df else None
     
-    # Improved stats
+    # Improved stats with professional color scheme
     stats = {
-        "🧬 Genes": df['chrom'].nunique(),
-        "📊 Intervals": f"{len(df):,}",
-        "📏 Avg length": f"{length.mean():.0f} bp",
-        "🎯 Min length": f"{length.min():,} bp", 
-        "🎯 Max length": f"{length.max():,} bp",
-        "🌐 Coverage": f"{coverage_percent:.1f}%",
-        "🧩 Total bases": f"{total_bases/1e6:.1f} Mb",
-        "🔄 Duplicates": duplicates,
-        "❌ Null values": null_values
+        "🧬 Genes": {"value": df['chrom'].nunique(), "color": "#e8f5e9"},
+        "📊 Intervals": {"value": f"{len(df):,}", "color": "#e3f2fd"},
+        "📏 Avg length": {"value": f"{length.mean():.0f} bp", "color": "#fff3e0"},
+        "🎯 Min length": {"value": f"{length.min():,} bp", "color": "#ffebee"},
+        "🎯 Max length": {"value": f"{length.max():,} bp", "color": "#f3e5f5"},
+        "🌐 Coverage": {"value": f"{coverage_percent:.1f}%", "color": "#e8eaf6"},
+        "🧩 Total bases": {"value": f"{total_bases/1e6:.1f} Mb", "color": "#e0f2f1"},
+        "🔄 Duplicates": {"value": duplicates, "color": "#fff8e1"},
+        "❌ Null values": {"value": null_values, "color": "#ffebee"}
     }
     
     # Add strand metrics if available
     if strand_stats:
         stats.update({
-            "➕ + strand": f"{strand_stats.get('+', 0):.1%}",
-            "➖ - strand": f"{strand_stats.get('-', 0):.1%}"
+            "➕ + strand": {"value": f"{strand_stats.get('+', 0):.1%}", "color": "#e8f5e9"},
+            "➖ - strand": {"value": f"{strand_stats.get('-', 0):.1%}", "color": "#ffebee"}
         })
     
+    # Create the metrics banner
     st.write("""
     <div style='background: #f8f9fa;
                 border-radius: 8px;
-                padding: 12px;
-                margin: 10px 0;
+                padding: 15px;
+                margin: 15px 0;
                 border-left: 4px solid #2e86ab;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 flex-wrap: wrap;
-                gap: 10px;'>
+                gap: 12px;'>
     """, unsafe_allow_html=True)
     
     # Create columns dynamically based on stats count
     cols = st.columns(len(stats))
-    for i, (name, value) in enumerate(stats.items()):
+    for i, (name, data) in enumerate(stats.items()):
         with cols[i]:
             st.write(f"""
             <div style='text-align: center;
-                        min-width: 80px;
-                        padding: 5px;
-                        border-radius: 6px;
-                        background: rgba(255,255,255,0.7);
-                        border: 1px solid #e0e0e0;'>
-                <div style='font-size: 11px; color: #555; margin-bottom: 4px;'>{name}</div>
-                <div style='font-size: 13px; font-weight: 600; color: #2c3e50;'>{value}</div>
+                        min-width: 90px;
+                        padding: 8px;
+                        border-radius: 8px;
+                        background: {data["color"]};
+                        border: 1px solid #e0e0e0;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
+                <div style='font-size: 12px; color: #455a64; margin-bottom: 5px; font-weight: 500;'>{name}</div>
+                <div style='font-size: 14px; font-weight: 600; color: #263238;'>{data["value"]}</div>
             </div>
             """, unsafe_allow_html=True)
     
@@ -139,24 +141,68 @@ def show_data_preview(df: pd.DataFrame) -> None:
         show_data_quality(df)
 
 def show_data_quality(df: pd.DataFrame) -> None:
-    """Display data quality statistics"""
+    """Display data quality statistics with colored backgrounds"""
     st.subheader("🧬 Distinct Values")
     col1, col2, col3, col4 = st.columns(4)
     
+    # Define colors for metrics
+    colors = ["#e8f5e9", "#e3f2fd", "#fff3e0", "#e0f2f1"]
+    
     with col1:
-        st.metric("Chromosomes", df["chrom"].nunique())
+        st.markdown(f"""
+        <div style='background-color: {colors[0]}; 
+                    padding: 15px; 
+                    border-radius: 10px;
+                    text-align: center;
+                    border: 1px solid #e0e0e0;'>
+            <h3 style='margin: 0; color: #455a64;'>Chromosomes</h3>
+            <p style='font-size: 24px; font-weight: bold; margin: 5px 0; color: #263238;'>{df["chrom"].nunique()}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
     with col2:
-        st.metric("Total size", f"{(df['end'] - df['start']).sum():,} bp")
+        total_size = (df['end'] - df['start']).sum()
+        st.markdown(f"""
+        <div style='background-color: {colors[1]}; 
+                    padding: 15px; 
+                    border-radius: 10px;
+                    text-align: center;
+                    border: 1px solid #e0e0e0;'>
+            <h3 style='margin: 0; color: #455a64;'>Total size</h3>
+            <p style='font-size: 24px; font-weight: bold; margin: 5px 0; color: #263238;'>{f"{total_size:,} bp"}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
     with col3:
-        st.metric("Null values", df.isnull().sum().sum())
+        null_count = df.isnull().sum().sum()
+        st.markdown(f"""
+        <div style='background-color: {colors[2]}; 
+                    padding: 15px; 
+                    border-radius: 10px;
+                    text-align: center;
+                    border: 1px solid #e0e0e0;'>
+            <h3 style='margin: 0; color: #455a64;'>Null values</h3>
+            <p style='font-size: 24px; font-weight: bold; margin: 5px 0; color: #263238;'>{null_count}</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
     with col4:
-        st.metric("Columns", len(df.columns))
+        st.markdown(f"""
+        <div style='background-color: {colors[3]}; 
+                    padding: 15px; 
+                    border-radius: 10px;
+                    text-align: center;
+                    border: 1px solid #e0e0e0;'>
+            <h3 style='margin: 0; color: #455a64;'>Columns</h3>
+            <p style='font-size: 24px; font-weight: bold; margin: 5px 0; color: #263238;'>{len(df.columns)}</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     # Missing values analysis by column
     st.subheader("🔍 Null Values Detail")
     null_details = df.isnull().sum().to_frame("Null Values")
     null_details["Percentage"] = (null_details["Null Values"] / len(df) * 100).round(2)
-    st.table(null_details)
+    st.table(null_details.style.background_gradient(cmap="Reds", subset=["Null Values"]))
     
     # Data types by column
     st.subheader("📊 Data Types")
@@ -165,7 +211,7 @@ def show_data_quality(df: pd.DataFrame) -> None:
         'Type': [str(dtype) for dtype in df.dtypes],
         'Unique Values': [df[col].nunique() for col in df.columns]
     })
-    st.table(dtype_details)
+    st.table(dtype_details.style.background_gradient(cmap="Blues", subset=["Unique Values"]))
     
     # Strand analysis if column exists
     if 'strand' in df:
@@ -179,3 +225,15 @@ def show_data_quality(df: pd.DataFrame) -> None:
         st.write(f"Average score: {df['score'].mean():.2f}")
         st.write(f"Min score: {df['score'].min()}")
         st.write(f"Max score: {df['score'].max()}")
+
+# Example usage (if running as main)
+if __name__ == "__main__":
+    st.title("BED File Analyzer")
+    
+    uploaded_file = st.file_uploader("Upload a BED file", type=["bed", "txt"])
+    
+    if uploaded_file is not None:
+        df = load_bed(uploaded_file)
+        if df is not None:
+            show_metrics_banner(df)
+            show_data_preview(df)

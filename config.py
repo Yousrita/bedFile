@@ -1,5 +1,7 @@
 import streamlit as st
 from pathlib import Path
+import pandas as pd
+from typing import Optional
 
 def setup_page_config():
     """Configure sophisticated page settings for bioinformatics analysis"""
@@ -14,21 +16,27 @@ def setup_page_config():
             'About': "# BED File Processing Suite"
         }
     )
-def setup_styles():
-    """Boutons discrets et élégants en tons neutres"""
+
+def setup_styles(file_uploaded=False):
+    """Boutons avec couleur de fond une fois le fichier uploadé"""
     colors = {
-        "primary": "#97999B",  # Gris foncé subtil
-        "secondary": "#CF5C78",  # Gris moyen
-        "background": "#F9FAFB",  # Fond très clair
-        "accent": "#D1D5DB",  # Gris clair
+        "primary": "#97999B",
+        "secondary": "#CF5C78", 
+        "background": "#F9FAFB",
+        "accent": "#D1D5DB",
         "dark": "#679436",
-        "light": "#F3F4F6"
+        "light": "#F3F4F6",
+        "preview": "#4CAF50",  # Vert pour Preview
+        "sort": "#2196F3",     # Bleu pour Sort
+        "merge": "#FF9800",    # Orange pour Merge
+        "intersect": "#9C27B0" # Violet pour Intersect
     }
 
-    st.write(f"""
-    <style>
-        /* Style minimaliste */
-        .stButton>button {{
+    # Style de base pour tous les boutons
+    button_style = f"""
+        <style>
+        /* Style de base pour tous les boutons */
+        .stButton > button {{
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             font-weight: 400;
             font-size: 13px;
@@ -40,58 +48,67 @@ def setup_styles():
             min-width: 100px;
             margin: 2px 0;
             border: 1px solid {colors['accent']};
-            background-color: white;
-            color: {colors['dark']};
             box-shadow: none;
         }}
-
-        /* Bouton principal */
-        .stButton>button:first-child {{
-            background-color: {colors['dark']};
-            color: white;
-            border-color: {colors['dark']};
-        }}
-
-        /* Bouton secondaire */
-        .stButton>button:nth-child(2) {{
-            background-color: {colors['background']};
-            color: {colors['primary']};
-            border-color: {colors['secondary']};
-        }}
-
-        /* Bouton tertiaire */
-        .stButton>button:nth-child(3) {{
-            background-color: white;
-            color: {colors['primary']};
-            border-color: {colors['accent']};
-        }}
-
-        /* Effets au survol */
-        .stButton>button:hover {{
-            background-color: {colors['light']};
-            border-color: {colors['primary']};
-        }}
-
-        .stButton>button:first-child:hover {{
-            background-color: {colors['primary']};
-            border-color: {colors['primary']};
-        }}
-
-        .stButton>button:nth-child(2):hover {{
-            background-color: {colors['accent']};
-        }}
-
-        /* État désactivé */
-        .stButton>button:disabled {{
+        
+        /* Boutons désactivés (avant upload) */
+        .stButton > button:disabled {{
             background-color: {colors['background']} !important;
             color: {colors['secondary']} !important;
             border-color: {colors['light']} !important;
         }}
-    </style>
-    """, unsafe_allow_html=True)
+    """
+
+    # Si un fichier est uploadé, appliquer les couleurs aux boutons
+    if file_uploaded:
+        button_style += f"""
+        /* Bouton Preview - Vert */
+        .stButton > button:nth-child(1) {{
+            background-color: {colors['preview']} !important;
+            color: white !important;
+            border-color: {colors['preview']} !important;
+        }}
+        
+        /* Bouton Sort - Bleu */
+        .stButton > button:nth-child(2) {{
+            background-color: {colors['sort']} !important;
+            color: white !important;
+            border-color: {colors['sort']} !important;
+        }}
+        
+        /* Bouton Merge - Orange */
+        .stButton > button:nth-child(3) {{
+            background-color: {colors['merge']} !important;
+            color: white !important;
+            border-color: {colors['merge']} !important;
+        }}
+        
+        /* Bouton Intersect - Violet */
+        .stButton > button:nth-child(4) {{
+            background-color: {colors['intersect']} !important;
+            color: white !important;
+            border-color: {colors['intersect']} !important;
+        }}
+        
+        /* Effets au survol */
+        .stButton > button:hover {{
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }}
+        """
+    else:
+        # Style par défaut avant upload
+        button_style += f"""
+        .stButton > button {{
+            background-color: white;
+            color: {colors['dark']};
+        }}
+        """
+
+    st.write(button_style, unsafe_allow_html=True)
 
 def display_header():
-    """Display a premium header section with professionalanding"""
+    """Display a premium header section with professional landing"""
     col1, col2 = st.columns([1, 3])
 
     with col1:
@@ -107,11 +124,9 @@ def display_header():
         st.write("""
         <div style='font-size: 16px; color: #555; margin-bottom: 10px;'>
               Exploring and editing genomic data
-           
         </div>
         <div style='color: #777; font-size: 14px;'>
             <span style='background: #F0F0F0; padding: 3px 8px; border-radius: 4px; margin-right: 8px;'>BED</span>
-        
         </div>
         """, unsafe_allow_html=True)
 
@@ -125,19 +140,244 @@ def display_action_buttons(disabled=True):
     </div>
     """, unsafe_allow_html=True)
 
-    cols = st.columns(3)
+    cols = st.columns(4)
     with cols[0]:
-        preview_btn = st.button("**🔍 Data Preview**",
+        preview_btn = st.button("**🔍 Preview**",
                                 disabled=disabled,
                                 help="Comprehensive analysis of BED file contents")
     with cols[1]:
-        merge_btn = st.button("**🧬 Merge Intervals**",
+        sort_btn = st.button("**↕️ Sort**",
+                             disabled=disabled,
+                             help="Sort intervals by chromosome and position")
+    with cols[2]:
+        merge_btn = st.button("**🧬 Merge**",
                               disabled=disabled,
                               help="Advanced merging of genomic regions with configurable parameters")
-    with cols[2]:
-        export_btn = st.button("**📊 Export Analysis**",
-                               disabled=disabled,
-                               help="Generate professional reports and export in multiple formats")
+    with cols[3]:
+        intersect_btn = st.button("**🔀 Intersect**",
+                                  disabled=disabled,
+                                  help="Find intersections between genomic intervals")
 
     st.write("---")
-    return preview_btn, merge_btn, export_btn
+    return preview_btn, sort_btn, merge_btn, intersect_btn
+
+def load_bed(uploaded_file) -> Optional[pd.DataFrame]:
+    """
+    Load a BED file with ALL its columns
+    """
+    try:
+        # Read the file without column limit
+        df = pd.read_csv(
+            uploaded_file,
+            sep="\t",
+            header=None,
+            comment='#',
+            dtype=str  # ← Read everything as string first
+        )
+        
+        # Define standard BED column names
+        bed_cols = ['chrom', 'start', 'end', 'name', 'score', 'strand', 
+                   'thickStart', 'thickEnd', 'itemRgb', 'blockCount', 
+                   'blockSizes', 'blockStarts']
+        
+        # Name available columns
+        df.columns = bed_cols[:len(df.columns)]
+        
+        # Convert start and end to numeric
+        if 'start' in df.columns:
+            df['start'] = pd.to_numeric(df['start'], errors='coerce')
+        if 'end' in df.columns:
+            df['end'] = pd.to_numeric(df['end'], errors='coerce')
+        
+        # Validate
+        if len(df.columns) < 3:
+            st.error("❌ Invalid BED format: minimum 3 columns required")
+            return None
+            
+        if (df["start"] > df["end"]).any():
+            st.error("❌ Error: start positions > end positions detected")
+            return None
+            
+        return df
+        
+    except Exception as e:
+        st.error(f"❌ Loading error: {str(e)}")
+        return None
+
+def show_metrics_banner(df, genome_size=3_299_210_039):
+    """Display a comprehensive single-line file summary with colored backgrounds"""
+    if df is None or df.empty:
+        return
+        
+    # Calculate all metrics
+    length = df['end'] - df['start']
+    duplicates = df.duplicated().sum()
+    null_values = df.isnull().sum().sum()
+    total_bases = length.sum()
+    coverage_percent = (total_bases / genome_size) * 100
+    
+    # Check if strand column exists
+    strand_stats = df['strand'].value_counts(normalize=True).to_dict() if 'strand' in df else None
+    
+    # Improved stats with professional color scheme
+    stats = {
+        "🧬 Genes": {"value": df['chrom'].nunique(), "color": "#e8f5e9"},
+        "📊 Intervals": {"value": f"{len(df):,}", "color": "#e3f2fd"},
+        "📏 Avg length": {"value": f"{length.mean():.0f} bp", "color": "#fff3e0"},
+        "🎯 Min length": {"value": f"{length.min():,} bp", "color": "#ffebee"},
+        "🎯 Max length": {"value": f"{length.max():,} bp", "color": "#f3e5f5"},
+        "🌐 Coverage": {"value": f"{coverage_percent:.1f}%", "color": "#e8eaf6"},
+        "🧩 Total bases": {"value": f"{total_bases/1e6:.1f} Mb", "color": "#e0f2f1"},
+        "🔄 Duplicates": {"value": duplicates, "color": "#fff8e1"},
+        "❌ Null values": {"value": null_values, "color": "#ffebee"}
+    }
+    
+    # Add strand metrics if available
+    if strand_stats:
+        stats.update({
+            "➕ + strand": {"value": f"{strand_stats.get('+', 0):.1%}", "color": "#e8f5e9"},
+            "➖ - strand": {"value": f"{strand_stats.get('-', 0):.1%}", "color": "#ffebee"}
+        })
+    
+    # Create the metrics banner
+    st.write("""
+    <div style='background: #f8f9fa;
+                border-radius: 8px;
+                padding: 15px;
+                margin: 15px 0;
+                border-left: 4px solid #2e86ab;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 12px;'>
+    """, unsafe_allow_html=True)
+    
+    # Create columns dynamically based on stats count
+    cols = st.columns(len(stats))
+    for i, (name, data) in enumerate(stats.items()):
+        with cols[i]:
+            st.write(f"""
+            <div style='text-align: center;
+                        min-width: 90px;
+                        padding: 8px;
+                        border-radius: 8px;
+                        background: {data["color"]};
+                        border: 1px solid #e0e0e0;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
+                <div style='font-size: 12px; color: #455a64; margin-bottom: 5px; font-weight: 500;'>{name}</div>
+                <div style='font-size: 14px; font-weight: 600; color: #263238;'>{data["value"]}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    st.write("</div>", unsafe_allow_html=True)
+
+def show_data_preview(df: pd.DataFrame) -> None:
+    """Display data preview with ALL columns"""
+    st.subheader("📋 Data Preview")
+    st.dataframe(df.head(100), height=300)
+    st.caption(f"Displaying 100 rows out of {len(df):,} total - {len(df.columns)} columns")
+    
+    # Display column list
+    st.write("**📝 Available columns:**")
+    for i, col in enumerate(df.columns):
+        st.write(f"- `{col}` ({df[col].dtype})")
+
+def show_data_quality(df: pd.DataFrame) -> None:
+    """Display data quality statistics"""
+    st.subheader("🧪 Data Quality")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Chromosomes", df["chrom"].nunique())
+    with col2:
+        st.metric("Total size", f"{(df['end'] - df['start']).sum():,} bp")
+    with col3:
+        st.metric("Null values", df.isnull().sum().sum())
+    with col4:
+        st.metric("Columns", len(df.columns))
+    
+    # Missing values analysis by column
+    st.subheader("🔍 Null Values Detail")
+    null_details = df.isnull().sum().to_frame("Null Values")
+    null_details["Percentage"] = (null_details["Null Values"] / len(df) * 100).round(2)
+    st.table(null_details)
+    
+    # Data types by column
+    st.subheader("📊 Data Types")
+    dtype_details = pd.DataFrame({
+        'Column': df.columns,
+        'Type': [str(dtype) for dtype in df.dtypes],
+        'Unique Values': [df[col].nunique() for col in df.columns]
+    })
+    st.table(dtype_details)
+    
+    # Strand analysis if column exists
+    if 'strand' in df:
+        st.subheader("⚖ Strand Distribution")
+        strand_dist = df['strand'].value_counts(normalize=True)
+        st.bar_chart(strand_dist)
+    
+    # Score analysis if column exists
+    if 'score' in df:
+        st.subheader("📈 Score Distribution")
+        st.write(f"Average score: {df['score'].mean():.2f}")
+        st.write(f"Min score: {df['score'].min()}")
+        st.write(f"Max score: {df['score'].max()}")
+
+def main():
+    """Main application function"""
+    setup_page_config()
+    display_header()
+    
+    # File upload section
+    uploaded_file = st.file_uploader("Upload a BED file", type=["bed", "txt"])
+    
+    # Initialize session state for file upload status
+    if 'file_uploaded' not in st.session_state:
+        st.session_state.file_uploaded = False
+    
+    if uploaded_file is not None:
+        st.session_state.file_uploaded = True
+        df = load_bed(uploaded_file)
+        
+        if df is not None:
+            # Appliquer le style avec les boutons colorés
+            setup_styles(file_uploaded=True)
+            
+            # Display metrics banner
+            show_metrics_banner(df)
+            
+            # Display action buttons
+            preview_btn, sort_btn, merge_btn, intersect_btn = display_action_buttons(disabled=False)
+            
+            # Handle button actions
+            if preview_btn:
+                show_data_preview(df)
+                
+            if sort_btn:
+                st.subheader("↕️ Sorted Data")
+                sorted_df = df.sort_values(by=['chrom', 'start'])
+                st.dataframe(sorted_df.head(100), height=300)
+                st.success("Data sorted by chromosome and start position")
+                
+            if merge_btn:
+                st.subheader("🧬 Merge Intervals")
+                st.info("Merge functionality would be implemented here")
+                
+            if intersect_btn:
+                st.subheader("🔀 Intersect Intervals")
+                st.info("Intersect functionality would be implemented here")
+                
+            # Afficher l'onglet de qualité de données par défaut
+            if not any([preview_btn, sort_btn, merge_btn, intersect_btn]):
+                show_data_quality(df)
+    else:
+        st.session_state.file_uploaded = False
+        setup_styles(file_uploaded=False)
+        display_action_buttons(disabled=True)
+        st.info("👆 Please upload a BED file to begin analysis")
+
+if __name__ == "__main__":
+    main()

@@ -6,7 +6,8 @@ def merge_bed_files(df: pd.DataFrame) -> pd.DataFrame:
     """Merges a BED dataframe with itself"""
     # Columns normalization
     cols = ['chrom', 'start', 'end']
-    df = df[cols].copy()
+    #df = df[cols].copy()
+    df
     
     # Numeric conversion and cleaning
     df['start'] = pd.to_numeric(df['start'], errors='coerce')
