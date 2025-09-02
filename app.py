@@ -1,12 +1,16 @@
 import streamlit as st
-from config import setup_page_config, display_header
-from preview import load_bed, show_metrics_banner
-from mergeBed import handle_merge_operation
-from intersectBed import load_bed_int, intersect_bedtools
-from sort import sort_bed, handle_sort_operation
 import pandas as pd
 import gzip
 import io
+
+# Import des modules locaux
+from config import setup_page_config, display_header
+from preview import load_bed, show_metrics_banner
+from mergeBed import handle_merge_operation
+from sort import sort_bed, handle_sort_operation
+
+# Import de l'intersection Python pure
+from intersectBed import load_bed_int, python_pure_intersect
 
 # 👉 Move setup_page_config to the very beginning of the script
 setup_page_config()
@@ -130,6 +134,16 @@ def main():
             help="Supported format: .bed"  # ← CHANGED: Removed other formats
         )
         
+        # Options d'intersection simplifiées
+        st.subheader("⚙️ Options d'intersection")
+        col1, col2 = st.columns(2)
+        with col1:
+            wa = st.checkbox("Inclure File A", value=True, 
+                           help="Afficher les régions du fichier principal")
+        with col2:
+            wb = st.checkbox("Inclure File B", value=True,
+                           help="Afficher les régions du second fichier")
+        
         # Button to execute the intersection
         run_intersect_btn = st.button("🚀 Run Intersection", 
                                     disabled=uploaded_file_a is None,
@@ -154,11 +168,23 @@ def main():
                     with col_info2:
                         st.write(f"**File B:** {len(df2)} regions")
                     
+                    # Avertissement pour les gros fichiers
+                    if len(df1) > 10000 or len(df2) > 10000:
+                        st.warning("⚠️ Gros fichiers détectés. L'intersection peut prendre du temps en mode Python pur.")
+                    
                     # Execute intersection when button is clicked
                     if run_intersect_btn:
                         with st.spinner("Searching for overlaps..."):
-                            # Execute SIMPLIFIED intersection (without options)
-                            result_df = intersect_bedtools(df1, df2)
+                            # Options d'intersection
+                            options = {
+                                'wa': wa,
+                                'wb': wb,
+                                'wo': False,
+                                'v': False
+                            }
+                            
+                            # Execute intersection Python pure
+                            result_df = python_pure_intersect(df1, df2, options)
                             
                             if result_df is not None:
                                 if len(result_df) > 0:
