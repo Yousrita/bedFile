@@ -2,9 +2,10 @@ import pandas as pd
 import streamlit as st
 import gzip
 import io
-import subprocess
 import tempfile
 import os
+import pybedtools
+from pybedtools import BedTool
 
 def read_bed_file(uploaded_file):
     """
@@ -51,7 +52,7 @@ def load_bed_int(file1, file2):
         
         if df1.shape[1] != df2.shape[1]:
             st.warning("⚠️ Les fichiers ont des structures différentes!")
-            st.info("Bedtools utilisera seulement les 3 premières colonnes (chrom, start, end) pour l'intersection")
+            st.info("L'intersection utilisera seulement les 3 premières colonnes (chrom, start, end)")
     
     return df1, df2
 
@@ -60,52 +61,26 @@ def intersect_bedtools(df1, df2):
     Effectue l'intersection entre deux DataFrames BED de structures différentes
     """
     try:
-        # Créer des fichiers temporaires avec seulement les 3 premières colonnes
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.bed', delete=False) as f1:
-            # ⚠️ CORRECTION : Utiliser seulement les 3 premières colonnes pour bedtools
-            df1.iloc[:, :3].to_csv(f1.name, sep='\t', header=False, index=False)
-            temp_file1 = f1.name
+        # Créer des objets BedTool à partir des DataFrames avec les 3 premières colonnes
+        bed1 = BedTool.from_dataframe(df1[['chrom', 'start', 'end']].copy())
+        bed2 = BedTool.from_dataframe(df2[['chrom', 'start', 'end']].copy())
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.bed', delete=False) as f2:
-            # ⚠️ CORRECTION : Utiliser seulement les 3 premières colonnes pour bedtools
-            df2.iloc[:, :3].to_csv(f2.name, sep='\t', header=False, index=False)
-            temp_file2 = f2.name
+        # Effectuer l'intersection avec pybedtools
+        result_bed = bed1.intersect(bed2, wa=True, wb=True)
         
-        # Exécuter bedtools intersect
-        result = subprocess.run([
-            'bedtools', 'intersect', 
-            '-a', temp_file1, 
-            '-b', temp_file2,
-            '-wa', '-wb'
-        ], capture_output=True, text=True)
+        # Vérifier si il y a des résultats
+        if len(result_bed) == 0:
+            st.info("ℹ️ Aucune intersection trouvée entre les fichiers")
+            return pd.DataFrame()
         
-        # Nettoyer les fichiers temporaires
-        os.unlink(temp_file1)
-        os.unlink(temp_file2)
+        # Convertir le résultat en DataFrame
+        result_df = result_bed.to_dataframe()
         
-        if result.returncode == 0:
-            if not result.stdout.strip():
-                st.info("ℹ️ Aucune intersection trouvée entre les fichiers")
-                return pd.DataFrame()
-            
-            # Lire le résultat
-            result_df = pd.read_csv(io.StringIO(result.stdout), sep='\t', header=None)
-            
-            # ⚠️ CORRECTION IMPORTANTE : 
-            # Bedtools avec -wa -wb retourne TOUJOURS 6 colonnes :
-            # Colonnes 1-3 : A_chrom, A_start, A_end (du fichier A)
-            # Colonnes 4-6 : B_chrom, B_start, B_end (du fichier B)
-            
-            # Nommer les colonnes de base
+        # Nommer les colonnes (pybedtools retourne 6 colonnes pour wa=True, wb=True)
+        if len(result_df.columns) >= 6:
             result_df.columns = ['A_chrom', 'A_start', 'A_end', 'B_chrom', 'B_start', 'B_end']
-            
-            # ⭐ OPTIONNEL : Si vous voulez garder les colonnes supplémentaires originales
-            # Vous pouvez faire un merge avec les données originales plus tard
-            
-            return result_df
-        else:
-            st.error(f"Erreur bedtools: {result.stderr}")
-            return None
+        
+        return result_df
             
     except Exception as e:
         st.error(f"Erreur lors de l'intersection: {str(e)}")
@@ -119,66 +94,116 @@ def intersect_bedtools_advanced(df1, df2, options=None):
         options = {}
     
     try:
-        # Créer des fichiers temporaires avec seulement les 3 premières colonnes
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.bed', delete=False) as f1:
-            df1.iloc[:, :3].to_csv(f1.name, sep='\t', header=False, index=False)
-            temp_file1 = f1.name
+        # Créer des objets BedTool à partir des DataFrames avec les 3 premières colonnes
+        bed1 = BedTool.from_dataframe(df1[['chrom', 'start', 'end']].copy())
+        bed2 = BedTool.from_dataframe(df2[['chrom', 'start', 'end']].copy())
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.bed', delete=False) as f2:
-            df2.iloc[:, :3].to_csv(f2.name, sep='\t', header=False, index=False)
-            temp_file2 = f2.name
+        # Effectuer l'intersection avec les options
+        result_bed = bed1.intersect(bed2, 
+                                   wa=options.get('wa', False),
+                                   wb=options.get('wb', False),
+                                   wo=options.get('wo', False),
+                                   v=options.get('v', False),
+                                   f=options.get('f', 1e-9))  # Valeur par défaut très petite pour -f
         
-        # Construire la commande bedtools
-        cmd = ['bedtools', 'intersect', '-a', temp_file1, '-b', temp_file2]
+        # Vérifier si il y a des résultats
+        if len(result_bed) == 0:
+            return pd.DataFrame()
         
-        # Ajouter les options
-        if options.get('wa', False):
-            cmd.append('-wa')
-        if options.get('wb', False):
-            cmd.append('-wb')
-        if options.get('wo', False):
-            cmd.append('-wo')
-        if options.get('v', False):
-            cmd.append('-v')
-        if options.get('f', 0) > 0:
-            cmd.extend(['-f', str(options['f'])])
+        # Convertir le résultat en DataFrame
+        result_df = result_bed.to_dataframe()
         
-        # Exécuter bedtools intersect
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        # Adapter les colonnes en fonction des options
+        if options.get('wo', False) and len(result_df.columns) >= 7:
+            # -wo ajoute une colonne avec le nombre de paires de bases d'overlap
+            result_df.columns = ['A_chrom', 'A_start', 'A_end', 'B_chrom', 'B_start', 'B_end', 'overlap']
+        elif options.get('wa', False) and options.get('wb', False) and len(result_df.columns) >= 6:
+            # -wa -wb : 6 colonnes
+            result_df.columns = ['A_chrom', 'A_start', 'A_end', 'B_chrom', 'B_start', 'B_end']
+        elif options.get('wa', False) and len(result_df.columns) >= 3:
+            # -wa seulement : 3 colonnes (fichier A)
+            result_df.columns = ['A_chrom', 'A_start', 'A_end']
+        elif options.get('wb', False) and len(result_df.columns) >= 3:
+            # -wb seulement : 3 colonnes (fichier B)
+            result_df.columns = ['B_chrom', 'B_start', 'B_end']
+        elif len(result_df.columns) >= 3:
+            # Par défaut : 3 colonnes (fichier A)
+            result_df.columns = ['A_chrom', 'A_start', 'A_end']
         
-        # Nettoyer les fichiers temporaires
-        os.unlink(temp_file1)
-        os.unlink(temp_file2)
-        
-        if result.returncode == 0:
-            if not result.stdout.strip():
-                return pd.DataFrame()
-            
-            # Lire le résultat
-            result_df = pd.read_csv(io.StringIO(result.stdout), sep='\t', header=None)
-            
-            # Adapter les colonnes en fonction des options
-            if options.get('wo', False):
-                # -wo ajoute une colonne avec le pourcentage d'overlap
-                result_df.columns = ['A_chrom', 'A_start', 'A_end', 'B_chrom', 'B_start', 'B_end', 'overlap']
-            elif options.get('wa', False) and options.get('wb', False):
-                # -wa -wb : 6 colonnes
-                result_df.columns = ['A_chrom', 'A_start', 'A_end', 'B_chrom', 'B_start', 'B_end']
-            elif options.get('wa', False):
-                # -wa seulement : 3 colonnes (fichier A)
-                result_df.columns = ['A_chrom', 'A_start', 'A_end']
-            elif options.get('wb', False):
-                # -wb seulement : 3 colonnes (fichier B)
-                result_df.columns = ['B_chrom', 'B_start', 'B_end']
-            else:
-                # Par défaut : 3 colonnes (fichier A)
-                result_df.columns = ['A_chrom', 'A_start', 'A_end']
-            
-            return result_df
-        else:
-            st.error(f"Erreur bedtools: {result.stderr}")
-            return None
+        return result_df
             
     except Exception as e:
         st.error(f"Erreur lors de l'intersection: {str(e)}")
         return None
+
+# Interface Streamlit (identique à l'original)
+def main():
+    st.title("🔬 Intersection de fichiers BED")
+    st.write("Cet outil permet de trouver les intersections entre deux fichiers BED")
+    
+    # Upload des fichiers
+    file1 = st.file_uploader("Choisir le premier fichier BED (.bed ou .bed.gz)", type=['bed', 'bed.gz'])
+    file2 = st.file_uploader("Choisir le deuxième fichier BED (.bed ou .bed.gz)", type=['bed', 'bed.gz'])
+    
+    if file1 and file2:
+        df1, df2 = load_bed_int(file1, file2)
+        
+        if df1 is not None and df2 is not None:
+            st.success("✅ Fichiers chargés avec succès!")
+            
+            # Options d'intersection
+            st.subheader("Options d'intersection")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                wa = st.checkbox("wa", value=True, 
+                                help="Écrire la fonctionnalité originale A pour chaque intersection")
+            with col2:
+                wb = st.checkbox("wb", value=True,
+                                help="Écrire la fonctionnalité originale B pour chaque intersection")
+            with col3:
+                wo = st.checkbox("wo", value=False,
+                                help="Écrire la fonctionnalité originale A, B plus le nombre de paires de bases d'intersection")
+            
+            v = st.checkbox("v", value=False,
+                           help="N'écrire qu'entrées dans A qui n'ont AUCUNE intersection avec B")
+            
+            # Option -f (fraction overlap)
+            f_value = st.slider("Fraction d'overlap minimum (-f)", 
+                               min_value=0.0, max_value=1.0, value=0.0, step=0.01,
+                               help="Fraction minimale de recouvrement requis")
+            
+            # Bouton pour lancer l'intersection
+            if st.button("Lancer l'intersection"):
+                with st.spinner("Calcul de l'intersection en cours..."):
+                    options = {
+                        'wa': wa,
+                        'wb': wb,
+                        'wo': wo,
+                        'v': v,
+                        'f': f_value if f_value > 0 else 1e-9  # Éviter 0 exact pour pybedtools
+                    }
+                    
+                    result_df = intersect_bedtools_advanced(df1, df2, options)
+                    
+                    if result_df is not None:
+                        if not result_df.empty:
+                            st.success(f"✅ Intersection terminée! {len(result_df)} régions trouvées")
+                            
+                            # Afficher le résultat
+                            st.subheader("Résultat de l'intersection")
+                            st.dataframe(result_df)
+                            
+                            # Télécharger le résultat
+                            csv = result_df.to_csv(index=False, sep='\t')
+                            st.download_button(
+                                label="Télécharger le résultat",
+                                data=csv,
+                                file_name="intersection_result.bed",
+                                mime="text/tab-separated-values"
+                            )
+                        else:
+                            st.info("ℹ️ Aucune intersection trouvée entre les fichiers")
+
+if __name__ == "__main__":
+    main()
