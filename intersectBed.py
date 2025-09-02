@@ -81,22 +81,16 @@ def python_pure_intersect(df1, df2, options=None):
                 if overlap_start < overlap_end:
                     result_row = {}
                     
-                    if options.get('wa', True):
-                        result_row.update({
-                            'A_chrom': row1['chrom'],
-                            'A_start': row1['start'],
-                            'A_end': row1['end']
-                        })
-                    
-                    if options.get('wb', True):
-                        result_row.update({
-                            'B_chrom': row2['chrom'],
-                            'B_start': row2['start'],
-                            'B_end': row2['end']
-                        })
-                    
-                    if options.get('wo', False):
-                        result_row['overlap'] = overlap_end - overlap_start
+                    # ENLEVÉ: Les options wa, wb, wo - on garde toujours les deux fichiers
+                    result_row.update({
+                        'A_chrom': row1['chrom'],
+                        'A_start': row1['start'],
+                        'A_end': row1['end'],
+                        'B_chrom': row2['chrom'],
+                        'B_start': row2['start'],
+                        'B_end': row2['end'],
+                        'overlap': overlap_end - overlap_start
+                    })
                     
                     results.append(result_row)
     

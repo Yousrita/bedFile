@@ -134,16 +134,6 @@ def main():
             help="Supported format: .bed"  # ← CHANGED: Removed other formats
         )
         
-        # Options d'intersection simplifiées
-        st.subheader("⚙️ Options d'intersection")
-        col1, col2 = st.columns(2)
-        with col1:
-            wa = st.checkbox("Inclure File A", value=True, 
-                           help="Afficher les régions du fichier principal")
-        with col2:
-            wb = st.checkbox("Inclure File B", value=True,
-                           help="Afficher les régions du second fichier")
-        
         # Button to execute the intersection
         run_intersect_btn = st.button("🚀 Run Intersection", 
                                     disabled=uploaded_file_a is None,
@@ -168,23 +158,11 @@ def main():
                     with col_info2:
                         st.write(f"**File B:** {len(df2)} regions")
                     
-                    # Avertissement pour les gros fichiers
-                    if len(df1) > 10000 or len(df2) > 10000:
-                        st.warning("⚠️ Gros fichiers détectés. L'intersection peut prendre du temps en mode Python pur.")
-                    
                     # Execute intersection when button is clicked
                     if run_intersect_btn:
-                        with st.spinner("Searching for overlaps..."):
-                            # Options d'intersection
-                            options = {
-                                'wa': wa,
-                                'wb': wb,
-                                'wo': False,
-                                'v': False
-                            }
-                            
-                            # Execute intersection Python pure
-                            result_df = python_pure_intersect(df1, df2, options)
+                        with st.spinner("Intersection in progress..."):  # ← CHANGÉ: Message en anglais
+                            # Execute intersection Python pure (sans options)
+                            result_df = python_pure_intersect(df1, df2)
                             
                             if result_df is not None:
                                 if len(result_df) > 0:
