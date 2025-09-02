@@ -12,6 +12,16 @@ from sort import sort_bed, handle_sort_operation
 # Import de l'intersection Python pure
 from intersectBed import load_bed_int, python_pure_intersect
 
+# 🔒 MASQUER LE CODE SOURCE ET LE MENU
+hide_code = """
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_code, unsafe_allow_html=True)
+
 # 👉 Move setup_page_config to the very beginning of the script
 setup_page_config()
 
@@ -160,7 +170,7 @@ def main():
                     
                     # Execute intersection when button is clicked
                     if run_intersect_btn:
-                        with st.spinner("Intersection in progress..."):  # ← CHANGÉ: Message en anglais
+                        with st.spinner("Intersection in progress..."):
                             # Execute intersection Python pure (sans options)
                             result_df = python_pure_intersect(df1, df2)
                             
@@ -180,8 +190,7 @@ def main():
                                         st.metric("Regions in B", len(df2))
                                     with col_met3:
                                         st.metric("Overlaps", len(result_df))
-                                    
-                                    # Download results
+                                                                    # Download results
                                     csv = result_df.to_csv(index=False, sep='\t')
                                     st.download_button(
                                         label="📥 Download Results",
