@@ -26,16 +26,14 @@ def setup_styles(file_uploaded=False):
         "accent": "#D1D5DB",
         "dark": "#679436",
         "light": "#F3F4F6",
-        "preview": "#4CAF50",  # Vert pour Preview
-        "sort": "#2196F3",     # Bleu pour Sort
-        "merge": "#FF9800",    # Orange pour Merge
-        "intersect": "#9C27B0" # Violet pour Intersect
+        "preview": "#4CAF50",
+        "sort": "#2196F3",
+        "merge": "#FF9800",
+        "intersect": "#9C27B0"
     }
 
-    # Style de base pour tous les boutons
     button_style = f"""
         <style>
-        /* Style de base pour tous les boutons */
         .stButton > button {{
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             font-weight: 400;
@@ -51,7 +49,6 @@ def setup_styles(file_uploaded=False):
             box-shadow: none;
         }}
         
-        /* Boutons désactivés (avant upload) */
         .stButton > button:disabled {{
             background-color: {colors['background']} !important;
             color: {colors['secondary']} !important;
@@ -59,45 +56,38 @@ def setup_styles(file_uploaded=False):
         }}
     """
 
-    # Si un fichier est uploadé, appliquer les couleurs aux boutons
     if file_uploaded:
         button_style += f"""
-        /* Bouton Preview - Vert */
         .stButton > button:nth-child(1) {{
             background-color: {colors['preview']} !important;
             color: white !important;
             border-color: {colors['preview']} !important;
         }}
         
-        /* Bouton Sort - Bleu */
         .stButton > button:nth-child(2) {{
             background-color: {colors['sort']} !important;
             color: white !important;
             border-color: {colors['sort']} !important;
         }}
         
-        /* Bouton Merge - Orange */
         .stButton > button:nth-child(3) {{
             background-color: {colors['merge']} !important;
             color: white !important;
             border-color: {colors['merge']} !important;
         }}
         
-        /* Bouton Intersect - Violet */
         .stButton > button:nth-child(4) {{
             background-color: {colors['intersect']} !important;
             color: white !important;
             border-color: {colors['intersect']} !important;
         }}
         
-        /* Effets au survol */
         .stButton > button:hover {{
             opacity: 0.9;
             transform: translateY(-1px);
         }}
         """
     else:
-        # Style par défaut avant upload
         button_style += f"""
         .stButton > button {{
             background-color: white;
@@ -120,10 +110,10 @@ def display_header():
         """, unsafe_allow_html=True) 
 
     with col2:
-        st.title("BED File Explorer ")
+        st.title("BED File Explorer")
         st.write("""
         <div style='font-size: 16px; color: #555; margin-bottom: 10px;'>
-              Exploring and editing genomic data
+            Exploring and editing genomic data
         </div>
         <div style='color: #777; font-size: 14px;'>
             <span style='background: #F0F0F0; padding: 3px 8px; border-radius: 4px; margin-right: 8px;'>BED</span>
@@ -172,7 +162,7 @@ def load_bed(uploaded_file) -> Optional[pd.DataFrame]:
             sep="\t",
             header=None,
             comment='#',
-            dtype=str  # ← Read everything as string first
+            dtype=str
         )
         
         # Define standard BED column names
@@ -328,6 +318,7 @@ def show_data_quality(df: pd.DataFrame) -> None:
 
 def main():
     """Main application function"""
+    # Configuration MUST be first
     setup_page_config()
     display_header()
     
@@ -337,13 +328,26 @@ def main():
     # Initialize session state for file upload status
     if 'file_uploaded' not in st.session_state:
         st.session_state.file_uploaded = False
+    if 'show_success_message' not in st.session_state:
+        st.session_state.show_success_message = False
     
     if uploaded_file is not None:
-        st.session_state.file_uploaded = True
-        df = load_bed(uploaded_file)
+        # Show loading state
+        with st.spinner("🔄 Loading and analyzing your BED file..."):
+            df = load_bed(uploaded_file)
         
         if df is not None:
-            # Appliquer le style avec les boutons colorés
+            # ✅ AFFICHER LE MESSAGE DE SUCCÈS IMMÉDIATEMENT APRÈS LE CHARGEMENT
+            # Utiliser un état de session pour éviter la ré-exécution
+            if not st.session_state.show_success_message or st.session_state.current_file != uploaded_file.name:
+                st.success("✅ **File loaded successfully!**")
+                st.toast(f"📊 {uploaded_file.name} loaded with {len(df):,} regions", icon="✅")
+                st.session_state.show_success_message = True
+                st.session_state.current_file = uploaded_file.name
+            
+            st.session_state.file_uploaded = True
+            
+            # Apply styled buttons
             setup_styles(file_uploaded=True)
             
             # Display metrics banner
@@ -373,8 +377,15 @@ def main():
             # Afficher l'onglet de qualité de données par défaut
             if not any([preview_btn, sort_btn, merge_btn, intersect_btn]):
                 show_data_quality(df)
+        else:
+            st.error("❌ Failed to load the BED file. Please check the file format.")
+            st.session_state.show_success_message = False
     else:
+        # Reset states when no file is uploaded
         st.session_state.file_uploaded = False
+        st.session_state.show_success_message = False
+        st.session_state.current_file = None
+        
         setup_styles(file_uploaded=False)
         display_action_buttons(disabled=True)
         st.info("👆 Please upload a BED file to begin analysis")
